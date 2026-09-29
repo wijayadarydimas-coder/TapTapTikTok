@@ -1,364 +1,244 @@
 # gui.py
-
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 
-from mouse_utils import get_mouse_position
+import config
+from window_finder import list_windows, find_render_child, get_window_title
 
 
 class TapGUI:
-
-    def __init__(self, root, engine):
-
+    def __init__(self, root, engine, window_state):
         self.root = root
         self.engine = engine
+        self.window_state = window_state
 
-        self.root.title("TikTok Tap Tool")
-        self.root.geometry("450x480")
-        self.root.resizable(False, False)
+        root.title("Background Tap Tool")
+        root.geometry("560x540")
+        root.resizable(False, False)
 
-        # ----------------------------------------------------
-        # TITLE
-        # ----------------------------------------------------
-
-        title = tk.Label(
+        tk.Label(
             root,
-            text="TIKTOK TAP TOOL",
-            font=("Arial", 20, "bold")
-        )
+            text="BACKGROUND TAP TOOL",
+            font=("Arial", 19, "bold"),
+        ).pack(pady=14)
 
-        title.pack(pady=15)
-
-        # ----------------------------------------------------
-        # STATUS
-        # ----------------------------------------------------
-
-        self.status_label = tk.Label(
+        self.status = tk.Label(
             root,
             text="STATUS: READY",
-            font=("Arial", 14, "bold"),
-            foreground="blue"
+            font=("Arial", 12, "bold"),
+        )
+        self.status.pack()
+
+        # Window selection
+        wf = ttk.LabelFrame(root, text="Opera / Target Window")
+        wf.pack(fill="x", padx=20, pady=12)
+
+        self.window_combo = ttk.Combobox(
+            wf,
+            width=62,
+            state="readonly",
+        )
+        self.window_combo.grid(
+            row=0, column=0, padx=8, pady=8, columnspan=2
         )
 
-        self.status_label.pack()
+        tk.Button(
+            wf,
+            text="Refresh",
+            command=self.refresh_windows,
+        ).grid(row=1, column=0, padx=8, pady=6, sticky="w")
 
-        # ----------------------------------------------------
-        # POSITION
-        # ----------------------------------------------------
+        tk.Button(
+            wf,
+            text="Pilih Window",
+            command=self.select_window,
+        ).grid(row=1, column=1, padx=8, pady=6, sticky="e")
 
-        position_frame = ttk.LabelFrame(
+        self.window_info = tk.Label(
+            wf,
+            text="Belum ada window target.",
+            anchor="w",
+        )
+        self.window_info.grid(
+            row=2, column=0, columnspan=2,
+            padx=8, pady=6, sticky="w"
+        )
+
+        # Position
+        pf = ttk.LabelFrame(
             root,
-            text="Click Position"
+            text="Target Coordinate - relatif ke render window",
         )
+        pf.pack(fill="x", padx=20, pady=8)
 
-        position_frame.pack(
-            padx=20,
-            pady=15,
-            fill="x"
-        )
+        tk.Label(pf, text="X:").grid(row=0, column=0, padx=5, pady=8)
+        self.x_entry = tk.Entry(pf, width=10)
+        self.x_entry.insert(0, str(config.DEFAULT_X))
+        self.x_entry.grid(row=0, column=1)
 
-        tk.Label(
-            position_frame,
-            text="X:"
-        ).grid(
-            row=0,
-            column=0,
-            padx=5,
-            pady=10
-        )
-
-        self.x_entry = tk.Entry(
-            position_frame,
-            width=10
-        )
-
-        self.x_entry.insert(
-            0,
-            str(engine.x)
-        )
-
-        self.x_entry.grid(
-            row=0,
-            column=1
-        )
-
-        tk.Label(
-            position_frame,
-            text="Y:"
-        ).grid(
-            row=0,
-            column=2,
-            padx=5
-        )
-
-        self.y_entry = tk.Entry(
-            position_frame,
-            width=10
-        )
-
-        self.y_entry.insert(
-            0,
-            str(engine.y)
-        )
-
-        self.y_entry.grid(
-            row=0,
-            column=3
-        )
-
-        # ----------------------------------------------------
-        # MOUSE POSITION BUTTON
-        # ----------------------------------------------------
+        tk.Label(pf, text="Y:").grid(row=0, column=2, padx=5)
+        self.y_entry = tk.Entry(pf, width=10)
+        self.y_entry.insert(0, str(config.DEFAULT_Y))
+        self.y_entry.grid(row=0, column=3)
 
         tk.Button(
-            position_frame,
-            text="Ambil Posisi Mouse",
-            command=self.get_position
-        ).grid(
-            row=1,
-            column=0,
-            columnspan=2,
-            pady=10
-        )
-
-        tk.Button(
-            position_frame,
+            pf,
             text="Apply",
-            command=self.apply_position
-        ).grid(
-            row=1,
-            column=2,
-            columnspan=2
-        )
+            command=self.apply_position,
+        ).grid(row=0, column=4, padx=10)
 
-        self.coordinate_label = tk.Label(
-            root,
-            text=f"X={engine.x}   Y={engine.y}"
-        )
-
-        self.coordinate_label.pack()
-
-        # ----------------------------------------------------
-        # INFO
-        # ----------------------------------------------------
-
-        info_frame = ttk.LabelFrame(
-            root,
-            text="Tap Information"
-        )
-
-        info_frame.pack(
-            padx=20,
-            pady=15,
-            fill="x"
-        )
+        # Counters
+        inf = ttk.LabelFrame(root, text="Tap Information")
+        inf.pack(fill="x", padx=20, pady=8)
 
         tk.Label(
-            info_frame,
-            text="Pola:"
-        ).grid(
-            row=0,
-            column=0,
-            padx=10,
-            pady=5
-        )
+            inf,
+            text=f"Pola: {config.TAPS_PER_BATCH} tap → "
+                 f"{config.PAUSE_AFTER_BATCH:g} detik → ulangi",
+        ).pack(pady=5)
 
-        tk.Label(
-            info_frame,
-            text="100 TAP → 1 detik → ulangi"
-        ).grid(
-            row=0,
-            column=1
-        )
+        self.tap_label = tk.Label(inf, text="Total Tap: 0")
+        self.tap_label.pack()
 
-        self.tap_label = tk.Label(
-            info_frame,
-            text="Total Tap : 0"
-        )
+        self.batch_label = tk.Label(inf, text="Batch: 0")
+        self.batch_label.pack(pady=4)
 
-        self.tap_label.grid(
-            row=1,
-            column=0,
-            columnspan=2,
-            pady=5
-        )
-
-        self.batch_label = tk.Label(
-            info_frame,
-            text="Batch : 0"
-        )
-
-        self.batch_label.grid(
-            row=2,
-            column=0,
-            columnspan=2,
-            pady=5
-        )
-
-        # ----------------------------------------------------
-        # BUTTON
-        # ----------------------------------------------------
-
-        button_frame = tk.Frame(root)
-
-        button_frame.pack(pady=15)
+        # Buttons
+        bf = tk.Frame(root)
+        bf.pack(pady=12)
 
         tk.Button(
-            button_frame,
+            bf,
             text="START / STOP",
-            width=15,
+            width=18,
             height=2,
-            command=self.engine.toggle
-        ).grid(
-            row=0,
-            column=0,
-            padx=5
-        )
+            command=self.engine.toggle,
+        ).grid(row=0, column=0, padx=5)
 
         tk.Button(
-            button_frame,
+            bf,
             text="EMERGENCY STOP",
-            width=15,
+            width=18,
             height=2,
-            command=self.engine.emergency_stop
-        ).grid(
-            row=0,
-            column=1,
-            padx=5
-        )
+            command=self.engine.emergency_stop,
+        ).grid(row=0, column=1, padx=5)
 
         tk.Button(
             root,
             text="RESET",
-            width=15,
-            command=self.engine.reset
+            width=18,
+            command=self.engine.reset,
         ).pack()
-
-        # ----------------------------------------------------
-        # HOTKEY INFO
-        # ----------------------------------------------------
 
         tk.Label(
             root,
-            text="F6 = Start / Stop    |    F7 = Emergency Stop"
-        ).pack(pady=15)
+            text="F6 = Start/Stop    |    F7 = Emergency Stop",
+        ).pack(pady=12)
 
-        # ----------------------------------------------------
-        # CALLBACK
-        # ----------------------------------------------------
+        tk.Label(
+            root,
+            text=(
+                "Catatan: mode background tidak memindahkan cursor.\n"
+                "Chromium dapat menolak synthetic background mouse events."
+            ),
+            justify="center",
+        ).pack()
 
-        self.engine.set_status_callback(
-            self.update_status
+        engine.set_status_callback(self.update_status)
+        self.refresh_windows()
+
+    def refresh_windows(self):
+        matches = list_windows(config.WINDOW_TITLE_KEYWORDS)
+
+        self.window_combo["values"] = [
+            f"{hwnd} | {title}" for hwnd, title in matches
+        ]
+
+        if matches:
+            self.window_combo.current(0)
+
+    def select_window(self):
+        value = self.window_combo.get()
+
+        if not value:
+            messagebox.showwarning(
+                "Window",
+                "Tidak ada window target yang dipilih.",
+            )
+            return
+
+        hwnd = int(value.split("|", 1)[0].strip())
+        title = get_window_title(hwnd)
+
+        render = find_render_child(hwnd)
+
+        self.window_state["top_hwnd"] = hwnd
+        self.window_state["render_hwnd"] = render
+        self.window_state["title"] = title
+
+        self.engine.backend.set_target(render)
+
+        self.window_info.config(
+            text=f"Target: {title} | render HWND: {render}"
         )
-
-    # ========================================================
-    # GET POSITION
-    # ========================================================
-
-    def get_position(self):
-
-        x, y = get_mouse_position()
-
-        self.x_entry.delete(0, tk.END)
-        self.x_entry.insert(0, str(x))
-
-        self.y_entry.delete(0, tk.END)
-        self.y_entry.insert(0, str(y))
-
-        self.coordinate_label.config(
-            text=f"X={x}   Y={y}"
-        )
-
-    # ========================================================
-    # APPLY POSITION
-    # ========================================================
 
     def apply_position(self):
-
         try:
-
-            x = int(
-                self.x_entry.get()
-            )
-
-            y = int(
-                self.y_entry.get()
-            )
-
-            self.engine.set_position(
-                x,
-                y
-            )
-
-            self.coordinate_label.config(
-                text=f"X={x}   Y={y}"
-            )
-
+            x = int(self.x_entry.get())
+            y = int(self.y_entry.get())
+            self.engine.set_position(x, y)
         except ValueError:
-
-            self.coordinate_label.config(
-                text="Koordinat tidak valid!"
+            messagebox.showerror(
+                "Coordinate",
+                "X dan Y harus berupa angka.",
             )
-
-    # ========================================================
-    # STATUS CALLBACK
-    # ========================================================
 
     def update_status(
         self,
         tap_count,
         batch_count,
         running,
-        emergency_stopped
+        emergency_stopped,
+        error_message=None,
     ):
-
-        # Tkinter harus di-update dari main thread.
         self.root.after(
             0,
             self._update_status_ui,
             tap_count,
             batch_count,
             running,
-            emergency_stopped
+            emergency_stopped,
+            error_message,
         )
-
-    # ========================================================
-    # UPDATE UI
-    # ========================================================
 
     def _update_status_ui(
         self,
         tap_count,
         batch_count,
         running,
-        emergency_stopped
+        emergency_stopped,
+        error_message=None,
     ):
-
-        if emergency_stopped:
-
-            self.status_label.config(
+        if error_message:
+            self.status.config(
+                text=f"ERROR: {error_message}",
+                foreground="red",
+            )
+        elif emergency_stopped:
+            self.status.config(
                 text="STATUS: EMERGENCY STOP",
-                foreground="red"
+                foreground="red",
             )
-
         elif running:
-
-            self.status_label.config(
+            self.status.config(
                 text="STATUS: RUNNING",
-                foreground="green"
+                foreground="green",
             )
-
         else:
-
-            self.status_label.config(
+            self.status.config(
                 text="STATUS: STOPPED",
-                foreground="red"
+                foreground="red",
             )
 
-        self.tap_label.config(
-            text=f"Total Tap : {tap_count:,}"
-        )
-
-        self.batch_label.config(
-            text=f"Batch : {batch_count:,}"
-        )
+        self.tap_label.config(text=f"Total Tap: {tap_count:,}")
+        self.batch_label.config(text=f"Batch: {batch_count:,}")

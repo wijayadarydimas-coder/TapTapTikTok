@@ -1,67 +1,46 @@
 # main.py
-
 import tkinter as tk
 
+import config
+from background_input import BackgroundMouse
 from tap_engine import TapEngine
-from gui import TapGUI
 from hotkeys import HotkeyManager
+from gui import TapGUI
 
 
 def main():
-
-    # --------------------------------------------------------
-    # TKINTER
-    # --------------------------------------------------------
-
     root = tk.Tk()
 
-    # --------------------------------------------------------
-    # TAP ENGINE
-    # --------------------------------------------------------
+    # Akan diisi setelah user memilih window Opera.
+    window_state = {
+        "top_hwnd": None,
+        "render_hwnd": None,
+        "title": None,
+    }
 
-    engine = TapEngine()
+    # Default backend memakai HWND placeholder.
+    backend = BackgroundMouse(0)
 
-    # --------------------------------------------------------
-    # GUI
-    # --------------------------------------------------------
+    engine = TapEngine(backend)
 
     app = TapGUI(
         root,
-        engine
+        engine,
+        window_state,
     )
-
-    # --------------------------------------------------------
-    # HOTKEY
-    # --------------------------------------------------------
 
     hotkeys = HotkeyManager(
         on_start_stop=engine.toggle,
-        on_emergency_stop=engine.emergency_stop
+        on_emergency_stop=engine.emergency_stop,
     )
-
     hotkeys.start()
 
-    # --------------------------------------------------------
-    # CLOSE
-    # --------------------------------------------------------
-
-    def close_program():
-
+    def close():
         engine.stop()
-
         hotkeys.stop()
-
         root.destroy()
 
-    root.protocol(
-        "WM_DELETE_WINDOW",
-        close_program
-    )
-
-    # --------------------------------------------------------
-    # RUN
-    # --------------------------------------------------------
-
+    root.protocol("WM_DELETE_WINDOW", close)
     root.mainloop()
 
 
